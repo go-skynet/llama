@@ -31,7 +31,6 @@ The memory requirements for the models are approximately:
 git clone https://github.com/cornelk/llama-go
 cd llama-go
 make
-CGO_CFLAGS_ALLOW='-mf.*' go build .
 
 # install Python dependencies
 python3 -m pip install torch numpy sentencepiece
