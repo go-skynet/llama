@@ -172,7 +172,7 @@ $(info I CC:       $(CCV))
 $(info I CXX:      $(CXXV))
 $(info )
 
-default: main quantize
+default: main.o quantize libllama.a
 
 #
 # Build library
@@ -185,11 +185,14 @@ utils.o: utils.cpp utils.h
 	$(CXX) $(CXXFLAGS) -c utils.cpp -o utils.o
 
 clean:
-	rm -f *.o main quantize
+	rm -f *.o *.a quantize
 
-main: main.cpp ggml.o utils.o
-	$(CXX) $(CXXFLAGS) main.cpp ggml.o utils.o -o main $(LDFLAGS)
-	./main -h
+main.o: ggml.o utils.o
+	$(CXX) $(CXXFLAGS) -c main.cpp -o main.o $(LDFLAGS)
+	#./main -h
+
+libllama.a: main.o ggml.o utils.o
+	ar src libllama.a main.o ggml.o utils.o
 
 quantize: quantize.cpp ggml.o utils.o
 	$(CXX) $(CXXFLAGS) quantize.cpp ggml.o utils.o -o quantize $(LDFLAGS)

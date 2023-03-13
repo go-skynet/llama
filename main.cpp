@@ -1,5 +1,5 @@
 #include "ggml.h"
-
+#include "main.h"
 #include "utils.h"
 
 #include <cassert>
@@ -69,9 +69,19 @@ struct llama_model {
     std::map<std::string, struct ggml_tensor *> tensors;
 };
 
+struct llama_state {
+    gpt_vocab vocab;
+    llama_model model;
+    struct {
+        int64_t t_load_us = -1;
+        int64_t t_sample_us = -1;
+        int64_t t_predict_us = -1;
+    } timing;
+};
+
 // load the model's weights from a file
 bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab & vocab, int n_ctx) {
-    printf("%s: loading model from '%s' - please wait ...\n", __func__, fname.c_str());
+//    printf("%s: loading model from '%s' - please wait ...\n", __func__, fname.c_str());
 
     auto fin = std::ifstream(fname, std::ios::binary);
     if (!fin) {
@@ -110,16 +120,16 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
         n_ff = ((2*(4*hparams.n_embd)/3 + hparams.n_mult - 1)/hparams.n_mult)*hparams.n_mult;
         n_parts = LLAMA_N_PARTS.at(hparams.n_embd);
 
-        printf("%s: n_vocab = %d\n", __func__, hparams.n_vocab);
-        printf("%s: n_ctx   = %d\n", __func__, hparams.n_ctx);
-        printf("%s: n_embd  = %d\n", __func__, hparams.n_embd);
-        printf("%s: n_mult  = %d\n", __func__, hparams.n_mult);
-        printf("%s: n_head  = %d\n", __func__, hparams.n_head);
-        printf("%s: n_layer = %d\n", __func__, hparams.n_layer);
-        printf("%s: n_rot   = %d\n", __func__, hparams.n_rot);
-        printf("%s: f16     = %d\n", __func__, hparams.f16);
-        printf("%s: n_ff    = %d\n", __func__, n_ff);
-        printf("%s: n_parts = %d\n", __func__, n_parts);
+//        printf("%s: n_vocab = %d\n", __func__, hparams.n_vocab);
+//        printf("%s: n_ctx   = %d\n", __func__, hparams.n_ctx);
+//        printf("%s: n_embd  = %d\n", __func__, hparams.n_embd);
+//        printf("%s: n_mult  = %d\n", __func__, hparams.n_mult);
+//        printf("%s: n_head  = %d\n", __func__, hparams.n_head);
+//        printf("%s: n_layer = %d\n", __func__, hparams.n_layer);
+//        printf("%s: n_rot   = %d\n", __func__, hparams.n_rot);
+//        printf("%s: f16     = %d\n", __func__, hparams.f16);
+//        printf("%s: n_ff    = %d\n", __func__, n_ff);
+//        printf("%s: n_parts = %d\n", __func__, n_parts);
     }
 
     // load vocab
@@ -203,7 +213,7 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
 
         ctx_size += (5 + 10*n_layer)*256; // object overhead
 
-        printf("%s: ggml ctx size = %6.2f MB\n", __func__, ctx_size/(1024.0*1024.0));
+//        printf("%s: ggml ctx size = %6.2f MB\n", __func__, ctx_size/(1024.0*1024.0));
     }
 
     // create the ggml context
@@ -290,7 +300,7 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
 
         const size_t memory_size = ggml_nbytes(model.memory_k) + ggml_nbytes(model.memory_v);
 
-        printf("%s: memory_size = %8.2f MB, n_mem = %d\n", __func__, memory_size/1024.0/1024.0, n_mem);
+//        printf("%s: memory_size = %8.2f MB, n_mem = %d\n", __func__, memory_size/1024.0/1024.0, n_mem);
     }
 
     const size_t file_offset = fin.tellg();
@@ -308,7 +318,7 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
             fname_part += "." + std::to_string(i);
         }
 
-        printf("%s: loading model part %d/%d from '%s'\n", __func__, i+1, n_parts, fname_part.c_str());
+//        printf("%s: loading model part %d/%d from '%s'\n", __func__, i+1, n_parts, fname_part.c_str());
 
         fin = std::ifstream(fname_part, std::ios::binary);
         fin.seekg(file_offset);
@@ -318,7 +328,7 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
             int n_tensors = 0;
             size_t total_size = 0;
 
-            printf("%s: ", __func__);
+//            printf("%s: ", __func__);
 
             while (true) {
                 int32_t n_dims;
@@ -482,15 +492,15 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
                 }
 
                 //printf("%42s - [%5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], ftype == 0 ? "float" : "f16", ggml_nbytes(tensor)/1024.0/1024.0);
-                if (++n_tensors % 8 == 0) {
-                    printf(".");
-                    fflush(stdout);
-                }
+//                if (++n_tensors % 8 == 0) {
+//                    printf(".");
+//                    fflush(stdout);
+//                }
             }
 
-            printf(" done\n");
+//            printf(" done\n");
 
-            printf("%s: model size = %8.2f MB / num tensors = %d\n", __func__, total_size/1024.0/1024.0, n_tensors);
+//            printf("%s: model size = %8.2f MB / num tensors = %d\n", __func__, total_size/1024.0/1024.0, n_tensors);
         }
 
         fin.close();
@@ -732,6 +742,8 @@ bool llama_eval(
     return true;
 }
 
+/*
+
 int main(int argc, char ** argv) {
     const int64_t t_main_start_us = ggml_time_us();
 
@@ -761,57 +773,89 @@ int main(int argc, char ** argv) {
     gpt_vocab vocab;
     llama_model model;
 
+ */
+
+void* llama_allocate_state() {
+    return new llama_state;
+}
+
+void* llama_allocate_params(const char *input, int threads, int tokens) {
+    gpt_params* params = new gpt_params;
+    params->prompt = input;
+    params->n_threads = threads;
+    params->n_predict = tokens;
+    return params;
+}
+
+void llama_free_params(void* params_ptr) {
+    gpt_params* params = (gpt_params*) params_ptr;
+    delete params;
+}
+
+bool llama_bootstrap(const char *model_path, void* state_pr)
     // load the model
     {
+        llama_state* state = (llama_state*) state_pr;
         const int64_t t_start_us = ggml_time_us();
 
-        if (!llama_model_load(params.model, model, vocab, 512)) {  // TODO: set context from user input ??
-            fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, params.model.c_str());
-            return 1;
+        if (!llama_model_load(model_path, state->model, state->vocab, 512)) {  // TODO: set context from user input ??
+            fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, model_path);
+            return false;
         }
 
-        t_load_us = ggml_time_us() - t_start_us;
+        state->timing.t_load_us = ggml_time_us() - t_start_us;
+        return true;
     }
 
+int llama_predict(void* params_ptr, void* state_pr) {
+    gpt_params* params = (gpt_params*) params_ptr;
+    llama_state* state = (llama_state*) state_pr;
+
+    const int64_t t_main_start_us = ggml_time_us();
     int n_past = 0;
 
-    int64_t t_sample_us  = 0;
-    int64_t t_predict_us = 0;
+    state->timing.t_sample_us = 0;
+    state->timing.t_predict_us = 0;
 
     std::vector<float> logits;
 
     // tokenize the prompt
-    std::vector<gpt_vocab::id> embd_inp = ::llama_tokenize(vocab, params.prompt, true);
+    std::vector <gpt_vocab::id> embd_inp = ::llama_tokenize(state->vocab, params->prompt, true);
 
-    params.n_predict = std::min(params.n_predict, model.hparams.n_ctx - (int) embd_inp.size());
+    params->n_predict = std::min(params->n_predict, state->model.hparams.n_ctx - (int) embd_inp.size());
 
     printf("\n");
-    printf("%s: prompt: '%s'\n", __func__, params.prompt.c_str());
-    printf("%s: number of tokens in prompt = %zu\n", __func__, embd_inp.size());
-    for (int i = 0; i < (int) embd_inp.size(); i++) {
-        printf("%6d -> '%s'\n", embd_inp[i], vocab.id_to_token.at(embd_inp[i]).c_str());
+//    printf("%s: prompt: '%s'\n", __func__, params->prompt.c_str());
+//    printf("%s: number of tokens in prompt = %zu\n", __func__, embd_inp.size());
+//    for (int i = 0; i < (int) embd_inp.size(); i++) {
+//        printf("%6d -> '%s'\n", embd_inp[i], state->vocab.id_to_token.at(embd_inp[i]).c_str());
+//    }
+//    printf("\n");
+//    printf("sampling parameters: temp = %f, top_k = %d, top_p = %f\n", params->temp, params->top_k, params->top_p);
+//    printf("\n\n");
+
+    std::vector <gpt_vocab::id> embd;
+
+    if (params->seed < 0) {
+        params->seed = time(NULL);
     }
-    printf("\n");
-    printf("sampling parameters: temp = %f, top_k = %d, top_p = %f\n", params.temp, params.top_k, params.top_p);
-    printf("\n\n");
-
-    std::vector<gpt_vocab::id> embd;
+    std::mt19937 rng(params->seed);
 
     // determine the required inference memory per token:
     size_t mem_per_token = 0;
-    llama_eval(model, params.n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
+    llama_eval(state->model, params->n_threads, 0, {0, 1, 2, 3}, logits, mem_per_token);
 
-    for (int i = embd.size(); i < embd_inp.size() + params.n_predict; i++) {
+    for (int i = embd.size(); i < embd_inp.size() + params->n_predict; i++) {
         // predict
         if (embd.size() > 0) {
             const int64_t t_start_us = ggml_time_us();
 
-            if (!llama_eval(model, params.n_threads, n_past, embd, logits, mem_per_token)) {
+            if (!llama_eval(state->model, params->n_threads, n_past, embd, logits, mem_per_token)) {
                 printf("Failed to predict\n");
                 return 1;
             }
 
-            t_predict_us += ggml_time_us() - t_start_us;
+            state->timing.t_predict_us += ggml_time_us() - t_start_us;
         }
 
         n_past += embd.size();
@@ -819,19 +863,19 @@ int main(int argc, char ** argv) {
 
         if (i >= embd_inp.size()) {
             // sample next token
-            const float top_p = params.top_p;
-            const float temp  = params.temp;
+            const float top_p = params->top_p;
+            const float temp = params->temp;
 
-            const int n_vocab = model.hparams.n_vocab;
+            const int n_vocab = state->model.hparams.n_vocab;
 
             gpt_vocab::id id = 0;
 
             {
                 const int64_t t_start_sample_us = ggml_time_us();
 
-                id = llama_sample_top_p(vocab, logits.data() + (logits.size() - n_vocab), top_p, temp, rng);
+                id = llama_sample_top_p(state->vocab, logits.data() + (logits.size() - n_vocab), top_p, temp, rng);
 
-                t_sample_us += ggml_time_us() - t_start_sample_us;
+                state->timing.t_sample_us += ggml_time_us() - t_start_sample_us;
             }
 
             // add it to the context
@@ -840,7 +884,7 @@ int main(int argc, char ** argv) {
             // if here, it means we are still processing the input prompt
             for (int k = i; k < embd_inp.size(); k++) {
                 embd.push_back(embd_inp[k]);
-                if (embd.size() > params.n_batch) {
+                if (embd.size() > params->n_batch) {
                     break;
                 }
             }
@@ -848,31 +892,34 @@ int main(int argc, char ** argv) {
         }
 
         // display text
-        for (auto id : embd) {
-            printf("%s", vocab.id_to_token[id].c_str());
+        for (auto id: embd) {
+            printf("%s", state->vocab.id_to_token[id].c_str());
         }
         fflush(stdout);
 
         // end of text token
         if (embd.back() == 2) {
-            printf(" [end of text]\n");
-            break;
+//            printf(" [end of text]\n");
+            return 2;
         }
     }
 
     // report timing
-    {
-        const int64_t t_main_end_us = ggml_time_us();
-
-        printf("\n\n");
-        printf("%s: mem per token = %8zu bytes\n", __func__, mem_per_token);
-        printf("%s:     load time = %8.2f ms\n", __func__, t_load_us/1000.0f);
-        printf("%s:   sample time = %8.2f ms\n", __func__, t_sample_us/1000.0f);
-        printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, t_predict_us/1000.0f, t_predict_us/1000.0f/n_past);
-        printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us)/1000.0f);
-    }
-
-    ggml_free(model.ctx);
-
+//    {
+//        const int64_t t_main_end_us = ggml_time_us();
+//
+//        printf("\n\n");
+//        printf("%s: mem per token = %8zu bytes\n", __func__, mem_per_token);
+//        printf("%s:     load time = %8.2f ms\n", __func__, state->timing.t_load_us / 1000.0f);
+//        printf("%s:   sample time = %8.2f ms\n", __func__, state->timing.t_sample_us / 1000.0f);
+//        printf("%s:  predict time = %8.2f ms / %.2f ms per token\n", __func__, state->timing.t_predict_us / 1000.0f, state->timing.t_predict_us / 1000.0f / n_past);
+//        printf("%s:    total time = %8.2f ms\n", __func__, (t_main_end_us - t_main_start_us) / 1000.0f);
+//    }
     return 0;
+}
+
+void llama_finalize(llama_state &state) {
+    ggml_free(state.model.ctx);
+
+//    return 0;
 }
