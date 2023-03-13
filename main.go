@@ -28,7 +28,7 @@ func main() {
 
 	state := C.llama_allocate_state()
 
-	fmt.Printf("Loading model %s...", model)
+	fmt.Printf("Loading model %s...\n", model)
 	modelPath := C.CString(model)
 	success := C.llama_bootstrap(modelPath, state)
 	if !success {
@@ -39,7 +39,7 @@ func main() {
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("Enter prompt: ")
+		fmt.Print(">>> ")
 		text, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Printf("Reading the prompt failed: %s", err)
