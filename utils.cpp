@@ -4,6 +4,16 @@
 #include <cstring>
 #include <fstream>
 #include <regex>
+#include <iostream>
+#include <iterator>
+#include <string>
+#include <math.h>
+
+ #if defined(_MSC_VER) || defined(__MINGW32__)
+ #include <malloc.h> // using malloc.h with MSC/MINGW
+ #elif !defined(__FreeBSD__)
+ #include <alloca.h>
+ #endif
 
 bool gpt_params_parse(int argc, char ** argv, gpt_params & params) {
     for (int i = 1; i < argc; i++) {
@@ -15,6 +25,14 @@ bool gpt_params_parse(int argc, char ** argv, gpt_params & params) {
             params.n_threads = std::stoi(argv[++i]);
         } else if (arg == "-p" || arg == "--prompt") {
             params.prompt = argv[++i];
+        } else if (arg == "-f" || arg == "--file") {
+
+            std::ifstream file(argv[++i]);
+
+            std::copy(std::istreambuf_iterator<char>(file),
+                    std::istreambuf_iterator<char>(),
+                    back_inserter(params.prompt));
+                
         } else if (arg == "-n" || arg == "--n_predict") {
             params.n_predict = std::stoi(argv[++i]);
         } else if (arg == "--top_k") {
@@ -23,10 +41,23 @@ bool gpt_params_parse(int argc, char ** argv, gpt_params & params) {
             params.top_p = std::stof(argv[++i]);
         } else if (arg == "--temp") {
             params.temp = std::stof(argv[++i]);
+        } else if (arg == "--repeat_last_n") {
+            params.repeat_last_n = std::stoi(argv[++i]);
+        } else if (arg == "--repeat_penalty") {
+            params.repeat_penalty = std::stof(argv[++i]);
         } else if (arg == "-b" || arg == "--batch_size") {
             params.n_batch = std::stoi(argv[++i]);
         } else if (arg == "-m" || arg == "--model") {
             params.model = argv[++i];
+        } else if (arg == "-i" || arg == "--interactive") {
+            params.interactive = true;
+        } else if (arg == "--interactive-start") {
+            params.interactive = true;
+            params.interactive_start = true;
+        } else if (arg == "--color") {
+            params.use_color = true;
+        } else if (arg == "-r" || arg == "--reverse-prompt") {
+            params.antiprompt = argv[++i];
         } else if (arg == "-h" || arg == "--help") {
             gpt_print_usage(argc, argv, params);
             exit(0);
@@ -45,13 +76,22 @@ void gpt_print_usage(int argc, char ** argv, const gpt_params & params) {
     fprintf(stderr, "\n");
     fprintf(stderr, "options:\n");
     fprintf(stderr, "  -h, --help            show this help message and exit\n");
+    fprintf(stderr, "  -i, --interactive     run in interactive mode\n");
+    fprintf(stderr, "  --interactive-start   run in interactive mode and poll user input at startup\n");
+    fprintf(stderr, "  -r PROMPT, --reverse-prompt PROMPT\n");
+    fprintf(stderr, "                        in interactive mode, poll user input upon seeing PROMPT\n");
+    fprintf(stderr, "  --color               colorise output to distinguish prompt and user input from generations\n");
     fprintf(stderr, "  -s SEED, --seed SEED  RNG seed (default: -1)\n");
     fprintf(stderr, "  -t N, --threads N     number of threads to use during computation (default: %d)\n", params.n_threads);
     fprintf(stderr, "  -p PROMPT, --prompt PROMPT\n");
     fprintf(stderr, "                        prompt to start generation with (default: random)\n");
+    fprintf(stderr, "  -f FNAME, --file FNAME\n");
+    fprintf(stderr, "                        prompt file to start generation.\n");
     fprintf(stderr, "  -n N, --n_predict N   number of tokens to predict (default: %d)\n", params.n_predict);
     fprintf(stderr, "  --top_k N             top-k sampling (default: %d)\n", params.top_k);
     fprintf(stderr, "  --top_p N             top-p sampling (default: %.1f)\n", params.top_p);
+    fprintf(stderr, "  --repeat_last_n N     last n tokens to consider for penalize (default: %d)\n", params.repeat_last_n);
+    fprintf(stderr, "  --repeat_penalty N    penalize repeat sequence of tokens (default: %.1f)\n", params.repeat_penalty);
     fprintf(stderr, "  --temp N              temperature (default: %.1f)\n", params.temp);
     fprintf(stderr, "  -b N, --batch_size N  batch size for prompt processing (default: %d)\n", params.n_batch);
     fprintf(stderr, "  -m FNAME, --model FNAME\n");
@@ -289,25 +329,8 @@ bool gpt_vocab_init(const std::string & fname, gpt_vocab & vocab) {
     return true;
 }
 
-gpt_vocab::id gpt_sample_top_k_top_p(
-        const gpt_vocab & vocab,
-        const float * logits,
-        int    top_k,
-        double top_p,
-        double temp,
-        std::mt19937 & rng) {
-    int n_logits = vocab.id_to_token.size();
 
-    std::vector<std::pair<double, gpt_vocab::id>> logits_id;
-    logits_id.reserve(n_logits);
-
-    {
-        const double scale = 1.0/temp;
-        for (int i = 0; i < n_logits; ++i) {
-            logits_id.push_back(std::make_pair(logits[i]*scale, i));
-        }
-    }
-
+void sample_top_k(std::vector<std::pair<double, gpt_vocab::id>> & logits_id, int top_k) {
     // find the top K tokens
     std::partial_sort(
             logits_id.begin(),
@@ -317,61 +340,14 @@ gpt_vocab::id gpt_sample_top_k_top_p(
     });
 
     logits_id.resize(top_k);
-
-    double maxl = -INFINITY;
-    for (const auto & kv : logits_id) {
-        maxl = std::max(maxl, kv.first);
-    }
-
-    // compute probs for the top K tokens
-    std::vector<double> probs;
-    probs.reserve(logits_id.size());
-
-    double sum = 0.0;
-    for (const auto & kv : logits_id) {
-        double p = exp(kv.first - maxl);
-        probs.push_back(p);
-        sum += p;
-    }
-
-    // normalize the probs
-    for (auto & p : probs) {
-        p /= sum;
-    }
-
-    if (top_p < 1.0f) {
-        double cumsum = 0.0f;
-        for (int i = 0; i < top_k; i++) {
-            cumsum += probs[i];
-            if (cumsum >= top_p) {
-                top_k = i + 1;
-                probs.resize(top_k);
-                logits_id.resize(top_k);
-                break;
-            }
-        }
-
-        cumsum = 1.0/cumsum;
-        for (int i = 0; i < (int) probs.size(); i++) {
-            probs[i] *= cumsum;
-        }
-    }
-
-    //printf("\n");
-    //for (int i = 0; i < (int) probs.size(); i++) {
-    //    printf("%d: '%s' %f\n", i, vocab.id_to_token.at(logits_id[i].second).c_str(), probs[i]);
-    //}
-    //exit(0);
-
-    std::discrete_distribution<> dist(probs.begin(), probs.end());
-    int idx = dist(rng);
-
-    return logits_id[idx].second;
 }
 
-gpt_vocab::id llama_sample_top_p(
+gpt_vocab::id llama_sample_top_p_top_k(
         const gpt_vocab & vocab,
         const float * logits,
+        std::vector<gpt_vocab::id> & last_n_tokens,
+        double repeat_penalty,
+        int top_k,
         double top_p,
         double temp,
         std::mt19937 & rng) {
@@ -383,16 +359,22 @@ gpt_vocab::id llama_sample_top_p(
     {
         const double scale = 1.0/temp;
         for (int i = 0; i < n_logits; ++i) {
-            logits_id.push_back(std::make_pair(logits[i]*scale, i));
+            // repetition penalty from CTRL paper (https://arxiv.org/abs/1909.05858)
+            // credit https://github.com/facebookresearch/llama/compare/main...shawwn:llama:main
+            if (std::find(last_n_tokens.begin(), last_n_tokens.end(), i) != last_n_tokens.end()) {
+                // if score < 0 then repetition penalty has to multiplied to reduce the previous token probability
+                if (logits[i] < 0.0) {
+                    logits_id.push_back(std::make_pair(logits[i]*scale*repeat_penalty, i));
+                } else {
+                    logits_id.push_back(std::make_pair(logits[i]*scale/repeat_penalty, i));
+                }                
+            } else {
+                logits_id.push_back(std::make_pair(logits[i]*scale, i));
+            }
         }
     }
 
-    std::sort(
-            logits_id.begin(),
-            logits_id.end(),
-            [](const std::pair<double, gpt_vocab::id> & a, const std::pair<double, gpt_vocab::id> & b) {
-        return a.first > b.first;
-    });
+    sample_top_k(logits_id, top_k);
 
     double maxl = -INFINITY;
     for (const auto & kv : logits_id) {
@@ -453,7 +435,8 @@ size_t ggml_quantize_q4_0(float * src, void * dst, int n, int k, int qk, int64_t
 
     assert(k % qk == 0);
 
-    uint8_t pp[qk/2];
+    const size_t pp_size = qk / 2;
+    uint8_t *pp = static_cast<uint8_t*>(alloca(pp_size));
 
     char * pdst = (char *) dst;
 
@@ -492,7 +475,7 @@ size_t ggml_quantize_q4_0(float * src, void * dst, int n, int k, int qk, int64_t
                     pp[l/2] = vi0 | (vi1 << 4);
                 }
 
-                memcpy(pb, pp, sizeof(pp));
+                memcpy(pb, pp, pp_size);
                 pb += bs;
             }
         }
@@ -507,7 +490,8 @@ size_t ggml_quantize_q4_1(float * src, void * dst, int n, int k, int qk, int64_t
 
     assert(k % qk == 0);
 
-    uint8_t pp[qk/2];
+    const size_t pp_size = qk / 2;
+    uint8_t *pp = static_cast<uint8_t*>(alloca(pp_size));
 
     char * pdst = (char *) dst;
 
@@ -551,7 +535,7 @@ size_t ggml_quantize_q4_1(float * src, void * dst, int n, int k, int qk, int64_t
                     pp[l/2] = vi0 | (vi1 << 4);
                 }
 
-                memcpy(pb + i*qk/2, pp, sizeof(pp));
+                memcpy(pb + i*qk/2, pp, pp_size);
             }
         }
     }
