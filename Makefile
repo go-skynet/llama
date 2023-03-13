@@ -189,13 +189,12 @@ clean:
 
 main.o: ggml.o utils.o
 	$(CXX) $(CXXFLAGS) -c main.cpp -o main.o $(LDFLAGS)
-	#./main -h
 
 libllama.a: main.o ggml.o utils.o
 	ar src libllama.a main.o ggml.o utils.o
 
 quantize: quantize.cpp ggml.o utils.o
-	$(CXX) $(CXXFLAGS) quantize.cpp ggml.o utils.o -o quantize $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -DQUANTIZE quantize.cpp ggml.o utils.o -o quantize $(LDFLAGS)
 
 #
 # Tests
