@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -42,6 +43,9 @@ func main() {
 		fmt.Print(">>> ")
 		text, err := reader.ReadString('\n')
 		if err != nil {
+			if err == io.EOF {
+				os.Exit(0)
+			}
 			fmt.Printf("Reading the prompt failed: %s", err)
 			os.Exit(1)
 		}
