@@ -509,7 +509,7 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
                     total_size += ggml_nbytes(tensor)/n_parts;
                 }
 /*
-                fprintf(stderr, "%42s - [%5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], ftype == 0 ? "float" : "f16", ggml_nbytes(tensor)/1024.0/1024.0);
+                //fprintf(stderr, "%42s - [%5d, %5d], type = %6s, %6.2f MB\n", name.data(), ne[0], ne[1], ftype == 0 ? "float" : "f16", ggml_nbytes(tensor)/1024.0/1024.0);
                 if (++n_tensors % 8 == 0) {
                     fprintf(stderr, ".");
                     fflush(stderr);
@@ -762,6 +762,7 @@ bool llama_eval(
 }
 
 static bool is_interacting = false;
+
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 void sigint_handler(int signo) {
     if (signo == SIGINT) {
@@ -869,6 +870,10 @@ bool llama_bootstrap(const char *model_path, void* state_pr)
 int llama_predict(void* params_ptr, void* state_pr) {
     gpt_params params = *(gpt_params*) params_ptr;
     llama_state state = *(llama_state*) state_pr;
+    gpt_vocab vocab = state.vocab;
+    llama_model model = state.model;
+
+
     if (params.seed < 0) {
         params.seed = time(NULL);
     }
@@ -882,12 +887,12 @@ int llama_predict(void* params_ptr, void* state_pr) {
     std::vector<float> logits;
 
     // tokenize the prompt
-    std::vector <gpt_vocab::id> embd_inp = ::llama_tokenize(state.vocab, params.prompt, true);
+    std::vector <gpt_vocab::id> embd_inp = ::llama_tokenize(vocab, params.prompt, true);
 
-    params.n_predict = std::min(params.n_predict, state.model.hparams.n_ctx - (int) embd_inp.size());
+    params.n_predict = std::min(params.n_predict, model.hparams.n_ctx - (int) embd_inp.size());
 
     // tokenize the reverse prompt
-    std::vector<gpt_vocab::id> antiprompt_inp = ::llama_tokenize(state.vocab, params.antiprompt, false);
+    std::vector<gpt_vocab::id> antiprompt_inp = ::llama_tokenize(vocab, params.antiprompt, false);
 
     fprintf(stderr, "\n");
     /*fprintf(stderr, "%s: prompt: '%s'\n", __func__, params.prompt.c_str());
@@ -923,9 +928,9 @@ int llama_predict(void* params_ptr, void* state_pr) {
 
     // determine the required inference memory per token:
     size_t mem_per_token = 0;
-    llama_eval(state.model, params.n_threads, 0, {0, 1, 2, 3}, logits, mem_per_token);
+    llama_eval(model, params.n_threads, 0, {0, 1, 2, 3}, logits, mem_per_token);
 
-    llama_eval(state.model, params.n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
+    llama_eval(model, params.n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
 
     int last_n_size = params.repeat_last_n;
     std::vector<gpt_vocab::id> last_n_tokens(last_n_size);
@@ -960,7 +965,7 @@ int llama_predict(void* params_ptr, void* state_pr) {
         if (embd.size() > 0) {
             const int64_t t_start_us = ggml_time_us();
 
-            if (!llama_eval(state.model, params.n_threads, n_past, embd, logits, mem_per_token)) {
+            if (!llama_eval(model, params.n_threads, n_past, embd, logits, mem_per_token)) {
                 fprintf(stderr, "Failed to predict\n");
                 return 1;
             }
@@ -978,14 +983,14 @@ int llama_predict(void* params_ptr, void* state_pr) {
             const float temp  = params.temp;
             const float repeat_penalty = params.repeat_penalty;
 
-            const int n_vocab = state.model.hparams.n_vocab;
+            const int n_vocab = model.hparams.n_vocab;
 
             gpt_vocab::id id = 0;
 
             {
                 const int64_t t_start_sample_us = ggml_time_us();
 
-                id = llama_sample_top_p_top_k(state.vocab, logits.data() + (logits.size() - n_vocab), last_n_tokens, repeat_penalty, top_k, top_p, temp, rng);
+                id = llama_sample_top_p_top_k(vocab, logits.data() + (logits.size() - n_vocab), last_n_tokens, repeat_penalty, top_k, top_p, temp, rng);
 
                 last_n_tokens.erase(last_n_tokens.begin());
                 last_n_tokens.push_back(id);
@@ -1022,7 +1027,7 @@ int llama_predict(void* params_ptr, void* state_pr) {
         // display text
         if (!input_noecho) {
             for (auto id : embd) {
-                printf("%s", state.vocab.id_to_token[id].c_str());
+                printf("%s", vocab.id_to_token[id].c_str());
             }
             fflush(stdout);
         }
@@ -1060,7 +1065,7 @@ int llama_predict(void* params_ptr, void* state_pr) {
                         buf[n_read+1] = 0;
                     }
 
-                    std::vector<gpt_vocab::id> line_inp = ::llama_tokenize(state.vocab, buf, false);
+                    std::vector<gpt_vocab::id> line_inp = ::llama_tokenize(vocab, buf, false);
                     embd_inp.insert(embd_inp.end(), line_inp.begin(), line_inp.end());
 
                     remaining_tokens -= line_inp.size();
