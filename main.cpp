@@ -136,18 +136,18 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
 
         n_ff = ((2*(4*hparams.n_embd)/3 + hparams.n_mult - 1)/hparams.n_mult)*hparams.n_mult;
         n_parts = LLAMA_N_PARTS.at(hparams.n_embd);
-
-//        fprintf(stderr, "%s: n_vocab = %d\n", __func__, hparams.n_vocab);
-//        fprintf(stderr, "%s: n_ctx   = %d\n", __func__, hparams.n_ctx);
-//        fprintf(stderr, "%s: n_embd  = %d\n", __func__, hparams.n_embd);
-//        fprintf(stderr, "%s: n_mult  = %d\n", __func__, hparams.n_mult);
-//        fprintf(stderr, "%s: n_head  = %d\n", __func__, hparams.n_head);
-//        fprintf(stderr, "%s: n_layer = %d\n", __func__, hparams.n_layer);
-//        fprintf(stderr, "%s: n_rot   = %d\n", __func__, hparams.n_rot);
-//        fprintf(stderr, "%s: f16     = %d\n", __func__, hparams.f16);
-//        fprintf(stderr, "%s: n_ff    = %d\n", __func__, n_ff);
-//        fprintf(stderr, "%s: n_parts = %d\n", __func__, n_parts);
-    }
+/*
+        fprintf(stderr, "%s: n_vocab = %d\n", __func__, hparams.n_vocab);
+        fprintf(stderr, "%s: n_ctx   = %d\n", __func__, hparams.n_ctx);
+        fprintf(stderr, "%s: n_embd  = %d\n", __func__, hparams.n_embd);
+        fprintf(stderr, "%s: n_mult  = %d\n", __func__, hparams.n_mult);
+        fprintf(stderr, "%s: n_head  = %d\n", __func__, hparams.n_head);
+        fprintf(stderr, "%s: n_layer = %d\n", __func__, hparams.n_layer);
+        fprintf(stderr, "%s: n_rot   = %d\n", __func__, hparams.n_rot);
+        fprintf(stderr, "%s: f16     = %d\n", __func__, hparams.f16);
+        fprintf(stderr, "%s: n_ff    = %d\n", __func__, n_ff);
+        fprintf(stderr, "%s: n_parts = %d\n", __func__, n_parts);
+*/    }
 
     // load vocab
     {
@@ -515,11 +515,11 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
                     fflush(stderr);
                 }*/
             }
+/*
+            fprintf(stderr, " done\n");
 
-//            fprintf(stderr, " done\n");
-
-//            fprintf(stderr, "%s: model size = %8.2f MB / num tensors = %d\n", __func__, total_size/1024.0/1024.0, n_tensors);
-        }
+            fprintf(stderr, "%s: model size = %8.2f MB / num tensors = %d\n", __func__, total_size/1024.0/1024.0, n_tensors);
+*/        }
 
         fin.close();
     }
@@ -867,27 +867,27 @@ bool llama_bootstrap(const char *model_path, void* state_pr)
     }
 */
 int llama_predict(void* params_ptr, void* state_pr) {
-    gpt_params* params = (gpt_params*) params_ptr;
-    llama_state* state = (llama_state*) state_pr;
-    if (params->seed < 0) {
-        params->seed = time(NULL);
+    gpt_params params = *(gpt_params*) params_ptr;
+    llama_state state = *(llama_state*) state_pr;
+    if (params.seed < 0) {
+        params.seed = time(NULL);
     }
-    std::mt19937 rng(params->seed);
+    std::mt19937 rng(params.seed);
     
     int n_past = 0;
 
-    state->timing.t_sample_us = 0;
-    state->timing.t_predict_us = 0;
+    state.timing.t_sample_us = 0;
+    state.timing.t_predict_us = 0;
 
     std::vector<float> logits;
 
     // tokenize the prompt
-    std::vector <gpt_vocab::id> embd_inp = ::llama_tokenize(state->vocab, params->prompt, true);
+    std::vector <gpt_vocab::id> embd_inp = ::llama_tokenize(state.vocab, params.prompt, true);
 
-    params->n_predict = std::min(params->n_predict, state->model.hparams.n_ctx - (int) embd_inp.size());
+    params.n_predict = std::min(params.n_predict, state.model.hparams.n_ctx - (int) embd_inp.size());
 
     // tokenize the reverse prompt
-    std::vector<gpt_vocab::id> antiprompt_inp = ::llama_tokenize(state->vocab, params->antiprompt, false);
+    std::vector<gpt_vocab::id> antiprompt_inp = ::llama_tokenize(state.vocab, params.antiprompt, false);
 
     fprintf(stderr, "\n");
     /*fprintf(stderr, "%s: prompt: '%s'\n", __func__, params.prompt.c_str());
@@ -896,7 +896,7 @@ int llama_predict(void* params_ptr, void* state_pr) {
         fprintf(stderr, "%6d -> '%s'\n", embd_inp[i], vocab.id_to_token.at(embd_inp[i]).c_str());
     }
     fprintf(stderr, "\n");
-    if (params->interactive) {
+    if (params.interactive) {
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
         struct sigaction sigint_action;
         sigint_action.sa_handler = sigint_handler;
@@ -923,16 +923,16 @@ int llama_predict(void* params_ptr, void* state_pr) {
 
     // determine the required inference memory per token:
     size_t mem_per_token = 0;
-    llama_eval(state->model, params->n_threads, 0, {0, 1, 2, 3}, logits, mem_per_token);
+    llama_eval(state.model, params.n_threads, 0, {0, 1, 2, 3}, logits, mem_per_token);
 
-    llama_eval(state->model, params->n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
+    llama_eval(state.model, params.n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
 
-    int last_n_size = params->repeat_last_n;
+    int last_n_size = params.repeat_last_n;
     std::vector<gpt_vocab::id> last_n_tokens(last_n_size);
     std::fill(last_n_tokens.begin(), last_n_tokens.end(), 0);
 
 
-    if (params->interactive) {
+    if (params.interactive) {
         fprintf(stderr, "== Running in interactive mode. ==\n"
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
                " - Press Ctrl+C to interject at any time.\n"
@@ -941,17 +941,17 @@ int llama_predict(void* params_ptr, void* state_pr) {
                " - If you want to submit another line, end your input in '\\'.\n");
     }
 
-    int remaining_tokens = params->n_predict;
+    int remaining_tokens = params.n_predict;
     int input_consumed = 0;
     bool input_noecho = false;
 
     // prompt user immediately after the starting prompt has been loaded
-    if (params->interactive_start) {
+    if (params.interactive_start) {
         is_interacting = true;
     }
 
     // set the color for the prompt which will be output initially
-    if (params->use_color) {
+    if (params.use_color) {
         printf(ANSI_COLOR_YELLOW);
     }
 
@@ -960,12 +960,12 @@ int llama_predict(void* params_ptr, void* state_pr) {
         if (embd.size() > 0) {
             const int64_t t_start_us = ggml_time_us();
 
-            if (!llama_eval(state->model, params->n_threads, n_past, embd, logits, mem_per_token)) {
+            if (!llama_eval(state.model, params.n_threads, n_past, embd, logits, mem_per_token)) {
                 fprintf(stderr, "Failed to predict\n");
                 return 1;
             }
 
-            state->timing.t_predict_us += ggml_time_us() - t_start_us;
+            state.timing.t_predict_us += ggml_time_us() - t_start_us;
         }
 
         n_past += embd.size();
@@ -973,24 +973,24 @@ int llama_predict(void* params_ptr, void* state_pr) {
 
         if (embd_inp.size() <= input_consumed) {
             // out of user input, sample next token
-            const float top_k = params->top_k;
-            const float top_p = params->top_p;
-            const float temp  = params->temp;
-            const float repeat_penalty = params->repeat_penalty;
+            const float top_k = params.top_k;
+            const float top_p = params.top_p;
+            const float temp  = params.temp;
+            const float repeat_penalty = params.repeat_penalty;
 
-            const int n_vocab = state->model.hparams.n_vocab;
+            const int n_vocab = state.model.hparams.n_vocab;
 
             gpt_vocab::id id = 0;
 
             {
                 const int64_t t_start_sample_us = ggml_time_us();
 
-                id = llama_sample_top_p_top_k(state->vocab, logits.data() + (logits.size() - n_vocab), last_n_tokens, repeat_penalty, top_k, top_p, temp, rng);
+                id = llama_sample_top_p_top_k(state.vocab, logits.data() + (logits.size() - n_vocab), last_n_tokens, repeat_penalty, top_k, top_p, temp, rng);
 
                 last_n_tokens.erase(last_n_tokens.begin());
                 last_n_tokens.push_back(id);
 
-                state->timing.t_sample_us += ggml_time_us() - t_start_sample_us;
+                state.timing.t_sample_us += ggml_time_us() - t_start_sample_us;
             }
 
             // add it to the context
@@ -1008,13 +1008,13 @@ int llama_predict(void* params_ptr, void* state_pr) {
                 last_n_tokens.erase(last_n_tokens.begin());
                 last_n_tokens.push_back(embd_inp[input_consumed]);
                 ++input_consumed;
-                if (embd.size() > params->n_batch) {
+                if (embd.size() > params.n_batch) {
                     break;
                 }
             }
 
             // reset color to default if we there is no pending user input
-            if (!input_noecho && params->use_color && embd_inp.size() == input_consumed) {
+            if (!input_noecho && params.use_color && embd_inp.size() == input_consumed) {
                 printf(ANSI_COLOR_RESET);
             }
         }
@@ -1022,14 +1022,14 @@ int llama_predict(void* params_ptr, void* state_pr) {
         // display text
         if (!input_noecho) {
             for (auto id : embd) {
-                printf("%s", state->vocab.id_to_token[id].c_str());
+                printf("%s", state.vocab.id_to_token[id].c_str());
             }
             fflush(stdout);
         }
 
         // in interactive mode, and not currently processing queued inputs;
         // check if we should prompt the user for more
-        if (params->interactive && embd_inp.size() <= input_consumed) {
+        if (params.interactive && embd_inp.size() <= input_consumed) {
             // check for reverse prompt
             if (antiprompt_inp.size() && std::equal(antiprompt_inp.rbegin(), antiprompt_inp.rend(), last_n_tokens.rbegin())) {
                 // reverse prompt found
@@ -1042,13 +1042,13 @@ int llama_predict(void* params_ptr, void* state_pr) {
                     fflush(stdout);
                     char buf[256] = {0};
                     int n_read;
-                    if(params->use_color) printf(ANSI_BOLD ANSI_COLOR_GREEN);
+                    if(params.use_color) printf(ANSI_BOLD ANSI_COLOR_GREEN);
                     if (scanf("%255[^\n]%n%*c", buf, &n_read) <= 0) {
                         // presumable empty line, consume the newline
                         scanf("%*c");
                         n_read=0;
                     }
-                    if(params->use_color) printf(ANSI_COLOR_RESET);
+                    if(params.use_color) printf(ANSI_COLOR_RESET);
 
                     if (n_read > 0 && buf[n_read-1]=='\\') {
                         another_line = true;
@@ -1060,7 +1060,7 @@ int llama_predict(void* params_ptr, void* state_pr) {
                         buf[n_read+1] = 0;
                     }
 
-                    std::vector<gpt_vocab::id> line_inp = ::llama_tokenize(state->vocab, buf, false);
+                    std::vector<gpt_vocab::id> line_inp = ::llama_tokenize(state.vocab, buf, false);
                     embd_inp.insert(embd_inp.end(), line_inp.begin(), line_inp.end());
 
                     remaining_tokens -= line_inp.size();
@@ -1095,10 +1095,4 @@ int llama_predict(void* params_ptr, void* state_pr) {
     ggml_free(model.ctx);
 */
     return 0;
-}
-
-void llama_finalize(llama_state &state) {
-    ggml_free(state.model.ctx);
-
-//    return 0;
 }
