@@ -66,8 +66,34 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Print(">>> ")
-		text, err := reader.ReadString('\n')
+		text := readMultiLineInput(reader)
+
+		input := C.CString(text)
+		params := C.llama_allocate_params(input, C.int(seed), C.int(threads), C.int(tokens), C.int(topK),
+			C.float(topP), C.float(temp), C.float(repeatPenalty))
+		result = C.llama_predict(params, state)
+		switch result {
+		case 0:
+		case 1:
+			fmt.Println("\nPredicting failed")
+			os.Exit(1)
+		case 2:
+			fmt.Printf(" <more token available>")
+		}
+
+		C.llama_free_params(params)
+
+		fmt.Printf("\n\n")
+	}
+}
+
+// readMultiLineInput reads input until an empty line is entered.
+func readMultiLineInput(reader *bufio.Reader) string {
+	var lines []string
+	fmt.Print(">>> ")
+
+	for {
+		line, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
 				os.Exit(0)
@@ -76,30 +102,26 @@ func main() {
 			os.Exit(1)
 		}
 
-		optionChanged, err := handleParameterChange(text)
+		if len(strings.TrimSpace(line)) == 0 {
+			break
+		}
+
+		optionChanged, err := handleParameterChange(line)
 		if err != nil {
 			fmt.Printf("Reading the prompt failed: %s", err)
 			os.Exit(1)
 		}
 		if optionChanged {
+			lines = nil
+			fmt.Print(">>> ")
 			continue
 		}
 
-		input := C.CString(text)
-		params := C.llama_allocate_params(input, C.int(seed), C.int(threads), C.int(tokens), C.int(topK),
-			C.float(topP), C.float(temp), C.float(repeatPenalty))
-		result = C.llama_predict(params, state)
-		switch result {
-		case 0, 2:
-		case 1:
-			fmt.Println("\nPredicting failed")
-			os.Exit(1)
-		}
-
-		C.llama_free_params(params)
-
-		fmt.Printf("\n\n")
+		lines = append(lines, line)
 	}
+
+	text := strings.Join(lines, "")
+	return text
 }
 
 // handleParameterChange parses the input for any parameter changes.
