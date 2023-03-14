@@ -31,8 +31,8 @@ func main() {
 
 	fmt.Printf("Loading model %s...\n", model)
 	modelPath := C.CString(model)
-	success := C.llama_bootstrap(modelPath, state)
-	if !success {
+	result := C.llama_bootstrap(modelPath, state)
+	if result != 0 {
 		fmt.Println("Loading the model failed")
 		os.Exit(1)
 	}
@@ -52,7 +52,7 @@ func main() {
 
 		input := C.CString(text)
 		params := C.llama_allocate_params(input, C.int(threads), C.int(tokens))
-		result := C.llama_predict(params, state)
+		result = C.llama_predict(params, state)
 		if result == 2 {
 			fmt.Println("Predicting failed")
 			os.Exit(1)

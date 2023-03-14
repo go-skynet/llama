@@ -827,37 +827,21 @@ int main(int argc, char ** argv) {
 
  */
 
-void* llama_allocate_state() {
-    return new llama_state;
-}
-
-void* llama_allocate_params(const char *input, int threads, int tokens) {
-    gpt_params* params = new gpt_params;
-    params->prompt = input;
-    params->n_threads = threads;
-    params->n_predict = tokens;
-    return params;
-}
-
-void llama_free_params(void* params_ptr) {
-    gpt_params* params = (gpt_params*) params_ptr;
-    delete params;
-}
-
-bool llama_bootstrap(const char *model_path, void* state_pr)
+int llama_bootstrap(const char *model_path, void* state_pr)
     // load the model
     {
         ggml_time_init();
         llama_state* state = (llama_state*) state_pr;
+
         const int64_t t_start_us = ggml_time_us();
 
         if (!llama_model_load(model_path, state->model, state->vocab, 512)) {  // TODO: set context from user input ??
             fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, model_path);
-            return false;
+            return 1;
         }
 
         state->timing.t_load_us = ggml_time_us() - t_start_us;
-        return true;
+        return 0;
     }
 /*
     // print system information
@@ -887,7 +871,7 @@ int llama_predict(void* params_ptr, void* state_pr) {
     std::vector<float> logits;
 
     // tokenize the prompt
-    std::vector <gpt_vocab::id> embd_inp = ::llama_tokenize(vocab, params.prompt, true);
+    std::vector<gpt_vocab::id> embd_inp = ::llama_tokenize(vocab, params.prompt, true);
 
     params.n_predict = std::min(params.n_predict, model.hparams.n_ctx - (int) embd_inp.size());
 
@@ -928,8 +912,6 @@ int llama_predict(void* params_ptr, void* state_pr) {
 
     // determine the required inference memory per token:
     size_t mem_per_token = 0;
-    llama_eval(model, params.n_threads, 0, {0, 1, 2, 3}, logits, mem_per_token);
-
     llama_eval(model, params.n_threads, 0, { 0, 1, 2, 3 }, logits, mem_per_token);
 
     int last_n_size = params.repeat_last_n;
@@ -1100,4 +1082,21 @@ int llama_predict(void* params_ptr, void* state_pr) {
     ggml_free(model.ctx);
 */
     return 0;
+}
+
+void* llama_allocate_state() {
+    return new llama_state;
+}
+
+void* llama_allocate_params(const char *input, int threads, int tokens) {
+    gpt_params* params = new gpt_params;
+    params->prompt = input;
+    params->n_threads = threads;
+    params->n_predict = tokens;
+    return params;
+}
+
+void llama_free_params(void* params_ptr) {
+    gpt_params* params = (gpt_params*) params_ptr;
+    delete params;
 }

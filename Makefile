@@ -189,10 +189,11 @@ utils.o: utils.cpp utils.h
 	$(CXX) $(CXXFLAGS) -c utils.cpp -o utils.o
 
 clean:
-	rm -f *.o *.a quantize llama-go
+	rm -f *.o main quantize
+	rm -f *.a llama-go
 
-main.o: ggml.o utils.o
-	$(CXX) $(CXXFLAGS) -c main.cpp -o main.o $(LDFLAGS)
+main.o: main.cpp ggml.o utils.o
+	$(CXX) $(CXXFLAGS) main.cpp ggml.o utils.o -o main.o -c $(LDFLAGS)
 
 libllama.a: main.o ggml.o utils.o
 	ar src libllama.a main.o ggml.o utils.o
@@ -200,7 +201,7 @@ libllama.a: main.o ggml.o utils.o
 quantize: quantize.cpp ggml.o utils.o
 	$(CXX) $(CXXFLAGS) -DQUANTIZE quantize.cpp ggml.o utils.o -o quantize $(LDFLAGS)
 
-llama-go:
+llama-go: main.go main.cpp main.h
 	CGO_CFLAGS_ALLOW='-mf.*' go build .
 #
 # Tests
