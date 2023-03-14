@@ -26,7 +26,7 @@ var (
 	temp          = 0.80
 	repeatPenalty = 1.30
 
-	options = map[string]any{
+	options = map[string]interface{}{
 		"repeat_penalty": &repeatPenalty,
 		"seed":           &seed,
 		"temp":           &temp,
@@ -165,5 +165,5 @@ func printSettings() {
 	}
 	sort.Sort(settings)
 	s := strings.Join(settings, " ")
-	fmt.Printf("Current settings: %s\n\n", s)
+	fmt.Printf("Settings: %s\n\n", s)
 }
