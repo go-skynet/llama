@@ -89,8 +89,10 @@ func main() {
 		params := C.llama_allocate_params(input, C.int(seed), C.int(threads), C.int(tokens), C.int(topK),
 			C.float(topP), C.float(temp), C.float(repeatPenalty))
 		result = C.llama_predict(params, state)
-		if result == 2 {
-			fmt.Println("Predicting failed")
+		switch result {
+		case 0, 2:
+		case 1:
+			fmt.Println("\nPredicting failed")
 			os.Exit(1)
 		}
 

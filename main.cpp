@@ -948,7 +948,7 @@ int llama_predict(void* params_ptr, void* state_pr) {
             const int64_t t_start_us = ggml_time_us();
 
             if (!llama_eval(model, params.n_threads, n_past, embd, logits, mem_per_token)) {
-                fprintf(stderr, "Failed to predict\n");
+//                fprintf(stderr, "Failed to predict\n");
                 return 1;
             }
 
