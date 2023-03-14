@@ -73,3 +73,9 @@ Duck and Cover, Two Fleas, One Duck
 >>>
 
 ```
+
+The settings can be changed at runtime, multiple values are possible:
+```bash
+>>> seed=1234 threads=8
+Current settings: repeat_penalty=1.3 seed=1234 temp=0.8 threads=8 tokens=128 top_k=40 top_p=0.95
+```

@@ -10,11 +10,35 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+var (
+	seed    = -1
+	threads = 0
+	tokens  = 0
+
+	topK          = 40
+	topP          = 0.95
+	temp          = 0.80
+	repeatPenalty = 1.30
+
+	options = map[string]any{
+		"repeat_penalty": &repeatPenalty,
+		"seed":           &seed,
+		"temp":           &temp,
+		"threads":        &threads,
+		"tokens":         &tokens,
+		"top_k":          &topK,
+		"top_p":          &topP,
+	}
 )
 
 func main() {
 	var model string
-	var threads, tokens int
 
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flags.StringVar(&model, "m", "./models/7B/ggml-model-q4_0.bin", "path to q4_0.bin model file to load")
@@ -36,9 +60,11 @@ func main() {
 		fmt.Println("Loading the model failed")
 		os.Exit(1)
 	}
-	fmt.Printf("Model loaded successfully.\n\n")
+	fmt.Printf("Model loaded successfully.\n")
 
+	printSettings()
 	reader := bufio.NewReader(os.Stdin)
+
 	for {
 		fmt.Print(">>> ")
 		text, err := reader.ReadString('\n')
@@ -50,8 +76,18 @@ func main() {
 			os.Exit(1)
 		}
 
+		optionChanged, err := handleParameterChange(text)
+		if err != nil {
+			fmt.Printf("Reading the prompt failed: %s", err)
+			os.Exit(1)
+		}
+		if optionChanged {
+			continue
+		}
+
 		input := C.CString(text)
-		params := C.llama_allocate_params(input, C.int(threads), C.int(tokens))
+		params := C.llama_allocate_params(input, C.int(seed), C.int(threads), C.int(tokens), C.int(topK),
+			C.float(topP), C.float(temp), C.float(repeatPenalty))
 		result = C.llama_predict(params, state)
 		if result == 2 {
 			fmt.Println("Predicting failed")
@@ -62,4 +98,72 @@ func main() {
 
 		fmt.Printf("\n\n")
 	}
+}
+
+// handleParameterChange parses the input for any parameter changes.
+// This is a generic function that can handle int and float type parameters.
+// The parameters need to be referenced by pointer in the options map.
+func handleParameterChange(input string) (bool, error) {
+	optionChanged := false
+	words := strings.Split(input, " ")
+
+	for _, word := range words {
+		parsed := strings.Split(word, "=")
+
+		if len(parsed) < 2 {
+			break
+		}
+
+		s := strings.TrimSpace(parsed[0])
+		opt, ok := options[s]
+		if !ok {
+			break
+		}
+
+		val := reflect.ValueOf(opt)
+		if val.Kind() != reflect.Ptr {
+			return false, fmt.Errorf("option %s is not a pointer", s)
+		}
+		val = val.Elem()
+		argument := strings.TrimSpace(parsed[1])
+		optionChanged = true
+
+		switch val.Kind() {
+		case reflect.Int:
+			i, err := strconv.ParseInt(argument, 10, 64)
+			if err != nil {
+				return false, fmt.Errorf("parsing value '%s' as int: %w", argument, err)
+			}
+			val.SetInt(i)
+
+		case reflect.Float32, reflect.Float64:
+			f, err := strconv.ParseFloat(argument, 64)
+			if err != nil {
+				return false, fmt.Errorf("parsing value '%s' as float: %w", argument, err)
+			}
+			val.SetFloat(f)
+
+		default:
+			return false, fmt.Errorf("unsupported option %s type %T", s, opt)
+		}
+	}
+
+	if optionChanged {
+		printSettings()
+	}
+	return optionChanged, nil
+}
+
+func printSettings() {
+	var settings sort.StringSlice
+	for setting, value := range options {
+		val := reflect.ValueOf(value)
+		if val.Kind() == reflect.Ptr {
+			val = val.Elem()
+		}
+		settings = append(settings, fmt.Sprintf("%s=%v", setting, val.Interface()))
+	}
+	sort.Sort(settings)
+	s := strings.Join(settings, " ")
+	fmt.Printf("Current settings: %s\n\n", s)
 }
