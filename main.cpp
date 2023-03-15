@@ -1089,16 +1089,18 @@ void* llama_allocate_state() {
 }
 
 void* llama_allocate_params(const char *prompt, int seed, int threads, int tokens, int top_k,
-                            float top_p, float temp, float repeat_penalty) {
+                            float top_p, float temp, float repeat_penalty, int repeat_last_n) {
     gpt_params* params = new gpt_params;
     params->seed = seed;
     params->n_threads = threads;
     params->n_predict = tokens;
+    params->repeat_last_n = repeat_last_n;
+
     params->top_k = top_k;
     params->top_p = top_p;
-    params->n_predict = tokens;
     params->temp = temp;
     params->repeat_penalty = repeat_penalty;
+
     params->prompt = prompt;
     return params;
 }

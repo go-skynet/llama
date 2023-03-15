@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	seed    = -1
-	threads = 0
-	tokens  = 0
+	repeatLastN = 64
+	seed        = -1
+	threads     = 4
+	tokens      = 128
 
 	topK          = 40
 	topP          = 0.95
@@ -27,11 +28,12 @@ var (
 	repeatPenalty = 1.30
 
 	options = map[string]interface{}{
+		"repeat_last_n":  &repeatLastN, // last n tokens to penalize
 		"repeat_penalty": &repeatPenalty,
-		"seed":           &seed,
+		"seed":           &seed, // RNG seed, -1 will seed based on current time
 		"temp":           &temp,
 		"threads":        &threads,
-		"tokens":         &tokens,
+		"tokens":         &tokens, // new tokens to predict
 		"top_k":          &topK,
 		"top_p":          &topP,
 	}
@@ -70,7 +72,7 @@ func main() {
 
 		input := C.CString(text)
 		params := C.llama_allocate_params(input, C.int(seed), C.int(threads), C.int(tokens), C.int(topK),
-			C.float(topP), C.float(temp), C.float(repeatPenalty))
+			C.float(topP), C.float(temp), C.float(repeatPenalty), C.int(repeatLastN))
 		result = C.llama_predict(params, state)
 		switch result {
 		case 0:
@@ -178,6 +180,7 @@ func handleParameterChange(input string) (bool, error) {
 	return optionChanged, nil
 }
 
+// printSettings outputs the current settings, alphabetically sorted.
 func printSettings() {
 	var settings sort.StringSlice
 	for setting, value := range options {
