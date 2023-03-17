@@ -201,7 +201,7 @@ libllama.a: lama.o ggml.o utils.o
 quantize: quantize.cpp ggml.o utils.o
 	$(CXX) $(CXXFLAGS) -DQUANTIZE quantize.cpp ggml.o utils.o -o quantize $(LDFLAGS)
 
-llama-go: main.go lama.cpp main.h
+llama-go: main.go lama.cpp lama.h
 	CGO_CFLAGS_ALLOW='-mf.*' go build .
 #
 # Tests
