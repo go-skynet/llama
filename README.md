@@ -5,8 +5,8 @@ This is [llama.cpp](https://github.com/ggerganov/llama.cpp) port in golang to us
 ## Usage
 
 ```
-git clone XXX
-cd XXX
+git clone https://github.com/go-skynet/llama.git
+cd llama
 make libllama.a
 LIBRARY_PATH=$PWD C_INCLUDE_PATH=$PWD go run ./examples/main.go -m ggml-alpaca-7b-q4.bin -n 10
 ```
