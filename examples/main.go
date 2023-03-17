@@ -30,8 +30,7 @@ func main() {
 		fmt.Printf("Parsing program arguments failed: %s", err)
 		os.Exit(1)
 	}
-	l := &llama.LLama{}
-	err = l.Load(model)
+	l, err := llama.New(model, 0)
 	if err != nil {
 		fmt.Println("Loading the model failed:", err.Error())
 		os.Exit(1)
@@ -43,7 +42,7 @@ func main() {
 	for {
 		text := readMultiLineInput(reader)
 
-		res, err := l.Predict(threads, tokens, text)
+		res, err := l.Predict(text, llama.SetTokens(tokens), llama.SetThreads(threads))
 		if err != nil {
 			panic(err)
 		}

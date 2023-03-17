@@ -9,51 +9,32 @@ import (
 	"unsafe"
 )
 
-var (
-	repeatLastN = 64
-	seed        = -1
-	threads     = 4
-	tokens      = 128
-
-	topK          = 40
-	topP          = 0.95
-	temp          = 0.80
-	repeatPenalty = 1.30
-
-	nCtx = 512 // context size
-
-	options = map[string]interface{}{
-		"repeat_last_n":  &repeatLastN, // last n tokens to penalize
-		"repeat_penalty": &repeatPenalty,
-		"seed":           &seed, // RNG seed, -1 will seed based on current time
-		"temp":           &temp,
-		"threads":        &threads,
-		"tokens":         &tokens, // new tokens to predict
-		"top_k":          &topK,
-		"top_p":          &topP,
-	}
-)
-
 type LLama struct {
 	state unsafe.Pointer
 }
 
-func (l *LLama) Load(model string) error {
+func New(model string, ctxSize int) (*LLama, error) {
+	if ctxSize == 0 {
+		ctxSize = 512
+	}
 	state := C.llama_allocate_state()
 	modelPath := C.CString(model)
-	result := C.llama_bootstrap(modelPath, state, C.int(nCtx))
+	result := C.llama_bootstrap(modelPath, state, C.int(ctxSize))
 	if result != 0 {
-		return fmt.Errorf("failed loading model")
+		return nil, fmt.Errorf("failed loading model")
 	}
-	l.state = state
-	return nil
+
+	return &LLama{state: state}, nil
 }
 
-func (l *LLama) Predict(threads int, tokens int, text string) (string, error) {
+func (l *LLama) Predict(text string, opts ...PredictOption) (string, error) {
+
+	po := NewPredictOptions(opts...)
+
 	input := C.CString(text)
-	out := make([]byte, tokens)
-	params := C.llama_allocate_params(input, C.int(seed), C.int(threads), C.int(tokens), C.int(topK),
-		C.float(topP), C.float(temp), C.float(repeatPenalty), C.int(repeatLastN))
+	out := make([]byte, po.Tokens)
+	params := C.llama_allocate_params(input, C.int(po.Seed), C.int(po.Threads), C.int(po.Tokens), C.int(po.TopK),
+		C.float(po.TopP), C.float(po.Temperature), C.float(po.Penalty), C.int(po.Repeat))
 	C.llama_predict(params, l.state, (*C.char)(unsafe.Pointer(&out[0])))
 	res := C.GoString((*C.char)(unsafe.Pointer(&out[0])))
 
