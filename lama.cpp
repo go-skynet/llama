@@ -1,5 +1,5 @@
 #include "ggml.h"
-#include "main.h"
+#include "lama.h"
 #include "utils.h"
 
 #include <cassert>
@@ -855,7 +855,7 @@ int llama_bootstrap(const char *model_path, void* state_pr, int32_t n_ctx)
                 params.n_threads, std::thread::hardware_concurrency(), llama_print_system_info());
     }
 */
-int llama_predict(void* params_ptr, void* state_pr) {
+int llama_predict(void* params_ptr, void* state_pr, char* result) {
     gpt_params params = *(gpt_params*) params_ptr;
     llama_state state = *(llama_state*) state_pr;
     gpt_vocab vocab = state.vocab;
@@ -882,38 +882,8 @@ int llama_predict(void* params_ptr, void* state_pr) {
     // tokenize the reverse prompt
     std::vector<gpt_vocab::id> antiprompt_inp = ::llama_tokenize(vocab, params.antiprompt, false);
 
-    fprintf(stderr, "\n");
-    /*fprintf(stderr, "%s: prompt: '%s'\n", __func__, params.prompt.c_str());
-    fprintf(stderr, "%s: number of tokens in prompt = %zu\n", __func__, embd_inp.size());
-    for (int i = 0; i < (int) embd_inp.size(); i++) {
-        fprintf(stderr, "%6d -> '%s'\n", embd_inp[i], vocab.id_to_token.at(embd_inp[i]).c_str());
-    }
-    fprintf(stderr, "\n");
-    if (params.interactive) {
-#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
-        struct sigaction sigint_action;
-        sigint_action.sa_handler = sigint_handler;
-        sigemptyset (&sigint_action.sa_mask);
-        sigint_action.sa_flags = 0;
-        sigaction(SIGINT, &sigint_action, NULL);
-#elif defined (_WIN32)
-        signal(SIGINT, sigint_handler);
-#endif
-
-        fprintf(stderr, "%s: interactive mode on.\n", __func__);
-
-        if(antiprompt_inp.size()) {
-            fprintf(stderr, "%s: reverse prompt: '%s'\n", __func__, params.antiprompt.c_str());
-            fprintf(stderr, "%s: number of tokens in reverse prompt = %zu\n", __func__, antiprompt_inp.size());
-            for (int i = 0; i < (int) antiprompt_inp.size(); i++) {
-                fprintf(stderr, "%6d -> '%s'\n", antiprompt_inp[i], vocab.id_to_token.at(antiprompt_inp[i]).c_str());
-            }
-            fprintf(stderr, "\n");
-        }
-    }
-    fprintf(stderr, "sampling parameters: temp = %f, top_k = %d, top_p = %f, repeat_last_n = %i, repeat_penalty = %f\n", params.temp, params.top_k, params.top_p, params.repeat_last_n, params.repeat_penalty);
-    fprintf(stderr, "\n\n");
-*/
+    //fprintf(stderr, "\n");
+   
     std::vector<gpt_vocab::id> embd;
 
     // determine the required inference memory per token:
@@ -925,36 +895,25 @@ int llama_predict(void* params_ptr, void* state_pr) {
     std::fill(last_n_tokens.begin(), last_n_tokens.end(), 0);
 
 
-    if (params.interactive) {
-        fprintf(stderr, "== Running in interactive mode. ==\n"
-#if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__)) || defined (_WIN32)
-               " - Press Ctrl+C to interject at any time.\n"
-#endif
-               " - Press Return to return control to LLaMa.\n"
-               " - If you want to submit another line, end your input in '\\'.\n");
-    }
+    
 
     int remaining_tokens = params.n_predict;
     int input_consumed = 0;
     bool input_noecho = false;
 
-    // prompt user immediately after the starting prompt has been loaded
-    if (params.interactive_start) {
-        is_interacting = true;
-    }
+    std::string res = "";
 
-    // set the color for the prompt which will be output initially
-    if (params.use_color) {
-        printf(ANSI_COLOR_YELLOW);
-    }
-
-    while (remaining_tokens > 0) {
+    while (true) {
+         if (params.n_predict != 0 && remaining_tokens <= 0) {
+            break;
+        }   
         // predict
         if (embd.size() > 0) {
             const int64_t t_start_us = ggml_time_us();
 
             if (!llama_eval(model, params.n_threads, n_past, embd, logits, mem_per_token)) {
 //                fprintf(stderr, "Failed to predict\n");
+                strcpy(result, res.c_str()); 
                 return 1;
             }
 
@@ -1005,70 +964,21 @@ int llama_predict(void* params_ptr, void* state_pr) {
                     break;
                 }
             }
-
-            // reset color to default if we there is no pending user input
-            if (!input_noecho && params.use_color && embd_inp.size() == input_consumed) {
-                printf(ANSI_COLOR_RESET);
-            }
         }
 
         // display text
         if (!input_noecho) {
             for (auto id : embd) {
-                printf("%s", vocab.id_to_token[id].c_str());
-            }
-            fflush(stdout);
-        }
-
-        // in interactive mode, and not currently processing queued inputs;
-        // check if we should prompt the user for more
-        if (params.interactive && embd_inp.size() <= input_consumed) {
-            // check for reverse prompt
-            if (antiprompt_inp.size() && std::equal(antiprompt_inp.rbegin(), antiprompt_inp.rend(), last_n_tokens.rbegin())) {
-                // reverse prompt found
-                is_interacting = true;
-            }
-            if (is_interacting) {
-                // currently being interactive
-                bool another_line=true;
-                while (another_line) {
-                    fflush(stdout);
-                    char buf[256] = {0};
-                    int n_read;
-                    if(params.use_color) printf(ANSI_BOLD ANSI_COLOR_GREEN);
-                    if (scanf("%255[^\n]%n%*c", buf, &n_read) <= 0) {
-                        // presumable empty line, consume the newline
-                        scanf("%*c");
-                        n_read=0;
-                    }
-                    if(params.use_color) printf(ANSI_COLOR_RESET);
-
-                    if (n_read > 0 && buf[n_read-1]=='\\') {
-                        another_line = true;
-                        buf[n_read-1] = '\n';
-                        buf[n_read] = 0;
-                    } else {
-                        another_line = false;
-                        buf[n_read] = '\n';
-                        buf[n_read+1] = 0;
-                    }
-
-                    std::vector<gpt_vocab::id> line_inp = ::llama_tokenize(vocab, buf, false);
-                    embd_inp.insert(embd_inp.end(), line_inp.begin(), line_inp.end());
-
-                    remaining_tokens -= line_inp.size();
-
-                    input_noecho = true; // do not echo this again
-                }
-
-                is_interacting = false;
+                res += vocab.id_to_token[id].c_str();
             }
         }
 
+   
         // end of text token
         if (embd.back() == 2) {
 //            fprintf(stderr, " [end of text]\n");
-            return 2;
+          //  return 2;
+          break;
         }
     }
 /*
@@ -1094,6 +1004,7 @@ int llama_predict(void* params_ptr, void* state_pr) {
         printf(ANSI_COLOR_RESET);
     }
 */
+    strcpy(result, res.c_str()); 
     return 0;
 }
 

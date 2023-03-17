@@ -2,7 +2,7 @@ package main
 
 // #cgo CFLAGS:   -I. -O3 -DNDEBUG -std=c11 -fPIC -pthread -mavx -mavx2 -mfma -mf16c -msse3
 // #cgo CXXFLAGS: -O3 -DNDEBUG -std=c++11 -fPIC -pthread -I.
-// #include "main.h"
+// #include "lama.h"
 import "C"
 import (
 	"bufio"
@@ -11,9 +11,11 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"unsafe"
 )
 
 var (
@@ -46,7 +48,7 @@ func main() {
 
 	flags := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	flags.StringVar(&model, "m", "./models/7B/ggml-model-q4_0.bin", "path to q4_0.bin model file to load")
-	flags.IntVar(&threads, "t", 4, "number of threads to use during computation")
+	flags.IntVar(&threads, "t", runtime.NumCPU(), "number of threads to use during computation")
 	flags.IntVar(&tokens, "n", 128, "number of tokens to predict")
 
 	err := flags.Parse(os.Args[1:])
@@ -73,17 +75,14 @@ func main() {
 		text := readMultiLineInput(reader)
 
 		input := C.CString(text)
+		out := make([]byte, tokens)
 		params := C.llama_allocate_params(input, C.int(seed), C.int(threads), C.int(tokens), C.int(topK),
 			C.float(topP), C.float(temp), C.float(repeatPenalty), C.int(repeatLastN))
-		result = C.llama_predict(params, state)
-		switch result {
-		case 0:
-		case 1:
-			fmt.Println("\nPredicting failed")
-			os.Exit(1)
-		case 2:
-			fmt.Printf(" <more token available>")
-		}
+		C.llama_predict(params, state, (*C.char)(unsafe.Pointer(&out[0])))
+		res := C.GoString((*C.char)(unsafe.Pointer(&out[0])))
+
+		res = strings.TrimPrefix(res, text)
+		fmt.Printf("\ngolang: %s\n", res)
 
 		C.llama_free_params(params)
 
@@ -125,6 +124,7 @@ func readMultiLineInput(reader *bufio.Reader) string {
 	}
 
 	text := strings.Join(lines, "")
+	fmt.Println("Sending", text)
 	return text
 }
 

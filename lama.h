@@ -12,7 +12,7 @@ void* llama_allocate_params(const char *prompt, int seed, int threads, int token
                             int top_k, float top_p, float temp, float repeat_penalty, int repeat_last_n);
 void llama_free_params(void* params_ptr);
 
-int llama_predict(void* params_ptr, void* state_pr);
+int llama_predict(void* params_ptr, void* state_pr, char* result);
 
 #ifdef __cplusplus
 }

@@ -176,7 +176,7 @@ $(info I CC:       $(CCV))
 $(info I CXX:      $(CXXV))
 $(info )
 
-default: main.o quantize libllama.a llama-go
+default: lama.o quantize libllama.a llama-go
 
 #
 # Build library
@@ -189,19 +189,19 @@ utils.o: utils.cpp utils.h
 	$(CXX) $(CXXFLAGS) -c utils.cpp -o utils.o
 
 clean:
-	rm -f *.o main quantize
+	rm -f *.o lama quantize
 	rm -f *.a llama-go
 
-main.o: main.cpp ggml.o utils.o
-	$(CXX) $(CXXFLAGS) main.cpp ggml.o utils.o -o main.o -c $(LDFLAGS)
+lama.o: lama.cpp ggml.o utils.o
+	$(CXX) $(CXXFLAGS) lama.cpp ggml.o utils.o -o lama.o -c $(LDFLAGS)
 
-libllama.a: main.o ggml.o utils.o
-	ar src libllama.a main.o ggml.o utils.o
+libllama.a: lama.o ggml.o utils.o
+	ar src libllama.a lama.o ggml.o utils.o
 
 quantize: quantize.cpp ggml.o utils.o
 	$(CXX) $(CXXFLAGS) -DQUANTIZE quantize.cpp ggml.o utils.o -o quantize $(LDFLAGS)
 
-llama-go: main.go main.cpp main.h
+llama-go: main.go lama.cpp main.h
 	CGO_CFLAGS_ALLOW='-mf.*' go build .
 #
 # Tests
