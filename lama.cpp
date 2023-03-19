@@ -27,6 +27,8 @@
 #define ANSI_COLOR_RESET   "\x1b[0m"
 #define ANSI_BOLD          "\x1b[1m"
 
+static const int EOS_TOKEN_ID = 2;
+
 // determine number of model parts based on the dimension
 static const std::map<int, int> LLAMA_N_PARTS = {
     { 4096, 1 },
@@ -942,6 +944,11 @@ int llama_predict(void* params_ptr, void* state_pr, char* result) {
             {
                 const int64_t t_start_sample_us = ggml_time_us();
 
+                if (params.ignore_eos) {
+                    // set the logit of the eos token to zero to avoid sampling it
+                    logits[logits.size() - n_vocab + EOS_TOKEN_ID] = 0;
+                }
+
                 id = llama_sample_top_p_top_k(vocab, logits.data() + (logits.size() - n_vocab), last_n_tokens, repeat_penalty, top_k, top_p, temp, rng);
 
                 last_n_tokens.erase(last_n_tokens.begin());
@@ -980,7 +987,7 @@ int llama_predict(void* params_ptr, void* state_pr, char* result) {
 
    
         // end of text token
-        if (embd.back() == 2) {
+        if (embd.back() == EOS_TOKEN_ID) {
 //            fprintf(stderr, " [end of text]\n");
           //  return 2;
           break;
@@ -1018,7 +1025,7 @@ void* llama_allocate_state() {
 }
 
 void* llama_allocate_params(const char *prompt, int seed, int threads, int tokens, int top_k,
-                            float top_p, float temp, float repeat_penalty, int repeat_last_n) {
+                            float top_p, float temp, float repeat_penalty, int repeat_last_n, bool ignore_eos) {
     gpt_params* params = new gpt_params;
     params->seed = seed;
     params->n_threads = threads;
@@ -1031,6 +1038,8 @@ void* llama_allocate_params(const char *prompt, int seed, int threads, int token
     params->repeat_penalty = repeat_penalty;
 
     params->prompt = prompt;
+    params->ignore_eos = ignore_eos;
+    
     return params;
 }
 

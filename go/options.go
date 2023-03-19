@@ -10,6 +10,7 @@ type ModelOptions struct {
 type PredictOptions struct {
 	Seed, Threads, Tokens, TopK, Repeat int
 	TopP, Temperature, Penalty          float64
+	IgnoreEOS                           bool
 }
 
 type PredictOption func(p *PredictOptions)
@@ -49,6 +50,10 @@ func NewModelOptions(opts ...ModelOption) ModelOptions {
 		opt(&p)
 	}
 	return p
+}
+
+var IgnoreEOS PredictOption = func(p *PredictOptions) {
+	p.IgnoreEOS = true
 }
 
 // SetSeed sets the random seed for sampling text generation.
