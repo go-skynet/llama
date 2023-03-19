@@ -96,7 +96,7 @@ struct llama_state {
 };
 
 // load the model's weights from a file
-bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab & vocab, int n_ctx) {
+bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab & vocab, int n_ctx, bool f16memory) {
 //    fprintf(stderr, "%s: loading model from '%s' - please wait ...\n", __func__, fname.c_str());
 
     std::vector<char> f_buf(1024*1024);
@@ -219,8 +219,14 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
         ctx_size += n_layer*(n_ff*n_embd*ggml_type_sizef(wtype)); // w2
         ctx_size += n_layer*(n_ff*n_embd*ggml_type_sizef(wtype)); // w3
 
-        ctx_size += n_ctx*n_layer*n_embd*ggml_type_sizef(GGML_TYPE_F32); // memory_k
-        ctx_size += n_ctx*n_layer*n_embd*ggml_type_sizef(GGML_TYPE_F32); // memory_v
+        if (f16memory) {
+            ctx_size += n_ctx*n_layer*n_embd*ggml_type_sizef(GGML_TYPE_F16); // memory_k
+            ctx_size += n_ctx*n_layer*n_embd*ggml_type_sizef(GGML_TYPE_F16); // memory_v
+
+        } else {
+            ctx_size += n_ctx*n_layer*n_embd*ggml_type_sizef(GGML_TYPE_F32); // memory_k
+            ctx_size += n_ctx*n_layer*n_embd*ggml_type_sizef(GGML_TYPE_F32); // memory_v
+        }
 
         ctx_size += (5 + 10*n_layer)*256; // object overhead
 
@@ -306,8 +312,13 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
         const int n_mem      = n_layer*n_ctx;
         const int n_elements = n_embd*n_mem;
 
-        model.memory_k = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_elements);
-        model.memory_v = ggml_new_tensor_1d(ctx, GGML_TYPE_F32, n_elements);
+        if (f16memory) {
+            model.memory_k = ggml_new_tensor_1d(ctx, GGML_TYPE_F16, n_elements);
+            model.memory_v = ggml_new_tensor_1d(ctx, GGML_TYPE_F16, n_elements);
+        } else {
+            model.memory_k = ggml_new_tensor_1d(ctx, GGML_TYPE_F16, n_elements);
+            model.memory_v = ggml_new_tensor_1d(ctx, GGML_TYPE_F16, n_elements);
+        }
 
         const size_t memory_size = ggml_nbytes(model.memory_k) + ggml_nbytes(model.memory_v);
 
@@ -824,14 +835,14 @@ int main(int argc, char ** argv) {
 
  */
 
-int llama_bootstrap(const char *model_path, void* state_pr, int32_t n_ctx)
+int llama_bootstrap(const char *model_path, void* state_pr, int32_t n_ctx, bool f16memory)
     // load the model
     {
         ggml_time_init();
         llama_state* state = (llama_state*) state_pr;
 
         const int64_t t_start_us = ggml_time_us();
-        if (!llama_model_load(model_path, state->model, state->vocab, n_ctx)) {
+        if (!llama_model_load(model_path, state->model, state->vocab, n_ctx, f16memory)) {
             fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, model_path);
             return 1;
         }

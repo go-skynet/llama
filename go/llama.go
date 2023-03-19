@@ -13,13 +13,11 @@ type LLama struct {
 	state unsafe.Pointer
 }
 
-func New(model string, ctxSize int) (*LLama, error) {
-	if ctxSize == 0 {
-		ctxSize = 512
-	}
+func New(model string, opts ...ModelOption) (*LLama, error) {
+	mo := NewModelOptions(opts...)
 	state := C.llama_allocate_state()
 	modelPath := C.CString(model)
-	result := C.llama_bootstrap(modelPath, state, C.int(ctxSize))
+	result := C.llama_bootstrap(modelPath, state, C.int(mo.ContextSize), C.bool(mo.F16Memory))
 	if result != 0 {
 		return nil, fmt.Errorf("failed loading model")
 	}

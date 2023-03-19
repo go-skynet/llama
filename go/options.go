@@ -2,22 +2,53 @@ package llama
 
 import "runtime"
 
+type ModelOptions struct {
+	ContextSize int
+	F16Memory   bool
+}
+
 type PredictOptions struct {
 	Seed, Threads, Tokens, TopK, Repeat int
 	TopP, Temperature, Penalty          float64
 }
 
 type PredictOption func(p *PredictOptions)
+type ModelOption func(p *ModelOptions)
+
+var DefaultModelOptions ModelOptions = ModelOptions{
+	ContextSize: 512,
+	F16Memory:   false,
+}
 
 var DefaultOptions PredictOptions = PredictOptions{
 	Seed:        -1,
 	Threads:     runtime.NumCPU(),
 	Tokens:      128,
 	TopK:        40,
-	TopP:        0.95,
-	Temperature: 0.80,
+	TopP:        0.90,
+	Temperature: 0.95,
 	Penalty:     1.3,
 	Repeat:      64,
+}
+
+// SetContext sets the context size.
+func SetContext(c int) ModelOption {
+	return func(p *ModelOptions) {
+		p.ContextSize = c
+	}
+}
+
+var EnableF16Memory ModelOption = func(p *ModelOptions) {
+	p.F16Memory = true
+}
+
+// Create a new PredictOptions object with the given options.
+func NewModelOptions(opts ...ModelOption) ModelOptions {
+	p := DefaultModelOptions
+	for _, opt := range opts {
+		opt(&p)
+	}
+	return p
 }
 
 // SetSeed sets the random seed for sampling text generation.
