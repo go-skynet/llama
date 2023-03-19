@@ -25,10 +25,10 @@ var DefaultOptions PredictOptions = PredictOptions{
 	Seed:        -1,
 	Threads:     runtime.NumCPU(),
 	Tokens:      128,
-	TopK:        40,
+	TopK:        10000,
 	TopP:        0.90,
-	Temperature: 0.95,
-	Penalty:     1.3,
+	Temperature: 0.96,
+	Penalty:     1,
 	Repeat:      64,
 }
 
