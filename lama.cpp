@@ -954,7 +954,7 @@ int llama_predict(void* params_ptr, void* state_pr, char* result) {
                 last_n_tokens.erase(last_n_tokens.begin());
                 last_n_tokens.push_back(embd_inp[input_consumed]);
                 ++input_consumed;
-                if (embd.size() > params.n_batch) {
+                if ((int)embd.size() >= params.n_batch) {
                     break;
                 }
             }
