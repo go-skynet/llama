@@ -30,6 +30,9 @@ func (l *LLama) Predict(text string, opts ...PredictOption) (string, error) {
 	po := NewPredictOptions(opts...)
 
 	input := C.CString(text)
+	if po.Tokens == 0 {
+		po.Tokens = 99999999
+	}
 	out := make([]byte, po.Tokens)
 	params := C.llama_allocate_params(input, C.int(po.Seed), C.int(po.Threads), C.int(po.Tokens), C.int(po.TopK),
 		C.float(po.TopP), C.float(po.Temperature), C.float(po.Penalty), C.int(po.Repeat), C.bool(po.IgnoreEOS))
