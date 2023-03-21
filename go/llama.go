@@ -17,7 +17,7 @@ func New(model string, opts ...ModelOption) (*LLama, error) {
 	mo := NewModelOptions(opts...)
 	state := C.llama_allocate_state()
 	modelPath := C.CString(model)
-	result := C.llama_bootstrap(modelPath, state, C.int(mo.ContextSize), C.bool(mo.F16Memory))
+	result := C.llama_bootstrap(modelPath, state, C.int(mo.ContextSize), C.bool(mo.F16Memory), C.bool(mo.Alpaca))
 	if result != 0 {
 		return nil, fmt.Errorf("failed loading model")
 	}

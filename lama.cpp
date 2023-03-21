@@ -38,6 +38,14 @@ static const std::map<int, int> LLAMA_N_PARTS = {
     { 8192, 8 },
 };
 
+// determine number of model parts based on the dimension
+static const std::map<int, int> ALPACA_N_PARTS = {
+    { 4096, 1 },
+    { 5120, 1 },
+    { 6656, 1 },
+    { 8192, 1 },
+};
+
 // default hparams (LLaMA 7B)
 struct llama_hparams {
     int32_t n_vocab = 32000;
@@ -99,7 +107,7 @@ struct llama_state {
 };
 
 // load the model's weights from a file
-bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab & vocab, int n_ctx, bool f16memory) {
+bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab & vocab, int n_ctx, bool f16memory, bool alpaca) {
 //    fprintf(stderr, "%s: loading model from '%s' - please wait ...\n", __func__, fname.c_str());
 
     std::vector<char> f_buf(1024*1024);
@@ -154,7 +162,11 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
         hparams.n_ctx = n_ctx;
 
         n_ff = ((2*(4*hparams.n_embd)/3 + hparams.n_mult - 1)/hparams.n_mult)*hparams.n_mult;
-        n_parts = LLAMA_N_PARTS.at(hparams.n_embd);
+        if (alpaca) {
+            n_parts = ALPACA_N_PARTS.at(hparams.n_embd);
+        } else {
+            n_parts = LLAMA_N_PARTS.at(hparams.n_embd);
+        }
 /*
         fprintf(stderr, "%s: n_vocab = %d\n", __func__, hparams.n_vocab);
         fprintf(stderr, "%s: n_ctx   = %d\n", __func__, hparams.n_ctx);
@@ -856,14 +868,14 @@ int main(int argc, char ** argv) {
 
  */
 
-int llama_bootstrap(const char *model_path, void* state_pr, int32_t n_ctx, bool f16memory)
+int llama_bootstrap(const char *model_path, void* state_pr, int32_t n_ctx, bool f16memory, bool alpaca)
     // load the model
     {
         ggml_time_init();
         llama_state* state = (llama_state*) state_pr;
 
         const int64_t t_start_us = ggml_time_us();
-        if (!llama_model_load(model_path, state->model, state->vocab, n_ctx, f16memory)) {
+        if (!llama_model_load(model_path, state->model, state->vocab, n_ctx, f16memory, alpaca)) {
             fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, model_path);
             return 1;
         }
@@ -928,7 +940,6 @@ int llama_predict(void* params_ptr, void* state_pr, char* result) {
     bool input_noecho = false;
 
     std::string res = "";
-
     while (true) {
          if (params.n_predict != 0 && remaining_tokens <= 0) {
             break;

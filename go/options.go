@@ -5,6 +5,7 @@ import "runtime"
 type ModelOptions struct {
 	ContextSize int
 	F16Memory   bool
+	Alpaca      bool
 }
 
 type PredictOptions struct {
@@ -19,6 +20,7 @@ type ModelOption func(p *ModelOptions)
 var DefaultModelOptions ModelOptions = ModelOptions{
 	ContextSize: 512,
 	F16Memory:   false,
+	Alpaca:      false,
 }
 
 var DefaultOptions PredictOptions = PredictOptions{
@@ -41,6 +43,10 @@ func SetContext(c int) ModelOption {
 
 var EnableF16Memory ModelOption = func(p *ModelOptions) {
 	p.F16Memory = true
+}
+
+var EnableAlpaca ModelOption = func(p *ModelOptions) {
+	p.Alpaca = true
 }
 
 // Create a new PredictOptions object with the given options.
