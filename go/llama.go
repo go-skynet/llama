@@ -42,7 +42,9 @@ func (l *LLama) Predict(text string, opts ...PredictOption) (string, error) {
 	}
 	res := C.GoString((*C.char)(unsafe.Pointer(&out[0])))
 
-	res = strings.TrimPrefix(res, " "+text)
+	res = strings.TrimPrefix(res, " ")
+	res = strings.TrimPrefix(res, text)
+	res = strings.TrimPrefix(res, "\n")
 
 	C.llama_free_params(params)
 
