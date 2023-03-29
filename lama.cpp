@@ -107,7 +107,7 @@ struct llama_state {
 };
 
 // load the model's weights from a file
-bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab & vocab, int n_ctx, bool f16memory, bool alpaca) {
+bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab & vocab, int n_ctx, bool f16memory, bool alpaca, bool gpt4all) {
 //    fprintf(stderr, "%s: loading model from '%s' - please wait ...\n", __func__, fname.c_str());
 
     std::vector<char> f_buf(1024*1024);
@@ -149,7 +149,9 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
     // load hparams
     {
         auto & hparams = model.hparams;
-
+        if (gpt4all) {
+           model.hparams.n_vocab++;
+        }
         fin.read((char *) &hparams.n_vocab, sizeof(hparams.n_vocab));
         //fin.read((char *) &hparams.n_ctx,   sizeof(hparams.n_ctx));
         fin.read((char *) &hparams.n_embd,  sizeof(hparams.n_embd));
@@ -183,7 +185,12 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
     // load vocab
     {
         std::string word;
-        for (int i = 0; i < model.hparams.n_vocab; i++) {
+        int n_vocab = model.hparams.n_vocab;
+        if (gpt4all) {
+            n_vocab = n_vocab - 1;
+        }
+
+        for (int i = 0; i < n_vocab; i++) {
             uint32_t len;
             fin.read((char *) &len, sizeof(len));
 
@@ -197,6 +204,10 @@ bool llama_model_load(const std::string & fname, llama_model & model, gpt_vocab 
             vocab.id_to_token[i] = word;
             vocab.score[i] = score;
 
+            if (gpt4all) {
+                vocab.token_to_id["<pad>"] =  n_vocab - 1;
+                vocab.id_to_token[ n_vocab - 1] = "<pad>";
+            }
             //if (i < 30000) {
             //    fprintf(stderr, "%s: vocab[%d] = '%s'\n", __func__, i, word.c_str());
             //}
@@ -868,14 +879,14 @@ int main(int argc, char ** argv) {
 
  */
 
-int llama_bootstrap(const char *model_path, void* state_pr, int32_t n_ctx, bool f16memory, bool alpaca)
+int llama_bootstrap(const char *model_path, void* state_pr, int32_t n_ctx, bool f16memory, bool alpaca, bool gpt4all)
     // load the model
     {
         ggml_time_init();
         llama_state* state = (llama_state*) state_pr;
 
         const int64_t t_start_us = ggml_time_us();
-        if (!llama_model_load(model_path, state->model, state->vocab, n_ctx, f16memory, alpaca)) {
+        if (!llama_model_load(model_path, state->model, state->vocab, n_ctx, f16memory, alpaca, gpt4all)) {
             fprintf(stderr, "%s: failed to load model from '%s'\n", __func__, model_path);
             return 1;
         }

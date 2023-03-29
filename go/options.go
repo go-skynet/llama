@@ -6,6 +6,7 @@ type ModelOptions struct {
 	ContextSize int
 	F16Memory   bool
 	Alpaca      bool
+	GPT4all     bool
 }
 
 type PredictOptions struct {
@@ -21,6 +22,7 @@ var DefaultModelOptions ModelOptions = ModelOptions{
 	ContextSize: 512,
 	F16Memory:   false,
 	Alpaca:      false,
+	GPT4all:     false,
 }
 
 var DefaultOptions PredictOptions = PredictOptions{
@@ -47,6 +49,10 @@ var EnableF16Memory ModelOption = func(p *ModelOptions) {
 
 var EnableAlpaca ModelOption = func(p *ModelOptions) {
 	p.Alpaca = true
+}
+
+var EnableGPT4All ModelOption = func(p *ModelOptions) {
+	p.GPT4all = true
 }
 
 // Create a new PredictOptions object with the given options.
