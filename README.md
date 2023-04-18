@@ -1,3 +1,7 @@
+# Archived
+
+Use: https://github.com/go-skynet/go-llama.cpp
+
 # llama-go
 
 This is [llama.cpp](https://github.com/ggerganov/llama.cpp) port in golang to use as a library.
